@@ -1,3 +1,5 @@
+## Generate calibration plots for different models (self-calibrated)
+
 # Utilises objects and libraries initiated in 02_wpp_modelling
 
 dat <- modelling_data
