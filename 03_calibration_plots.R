@@ -1,4 +1,5 @@
-library(ggpubr)
+# Utilises objects and libraries initiated in 02_wpp_modelling
+
 dat <- modelling_data
 
 
@@ -103,21 +104,24 @@ model_10 <- flexsurvspline(Surv(time, offer) ~ ns(age, df = 2) +
 
 model_references <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
 
+# Choose cut points to assess calibration at (chosen by trial and error)
 cuts_7 <- seq(0.58, 0.82, by = 0.08)
 cuts_14 <- seq(0.48, 0.72, by = 0.08)
 cuts_30 <- seq(0.3, 0.54, by = 0.08)
 
-
+# Initiate loop to gen calibration plot for each model
 for(ref in model_references) {
   model <- get(paste0("model_", ref))
   
-  ## One week ####
-  
+  ## One week calibration ####
+
+  # Find predictions
   pred_7_days = predict(model,
                         type = "survival",
                         newdata = dat,
                         times = 7)
-  
+
+  # Bin predictions into appropriate cut point
   data_with_preds <- cbind(dat, pred_7_days) %>% 
     select(time, offer, .pred_survival) %>% 
     mutate(surv_bin = case_when(
@@ -128,7 +132,9 @@ for(ref in model_references) {
     ))
   
   actual_7 <- c()
-  
+
+  # Find KM survival probability at one week for all people in 
+  # relevant bin
   for (cut in cuts_7) {
     data_surv_bin <- data_with_preds %>% 
       filter(near(surv_bin, cut)) 
@@ -223,7 +229,7 @@ for (i in seq_along(model_calibrations)) {
   # Create the plot
   p <- ggplot(model_data, aes(x = 1-cuts_7, y = 1-actual_7)) +
     scale_x_continuous () +
-    # Add the dashed line
+    # Add the dashed line (x-y line for perfect calibration)
     geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black") +
     # Add the red line-connected dot plot for 7 days
     geom_line(aes(color = '7 days')) +
@@ -237,6 +243,7 @@ for (i in seq_along(model_calibrations)) {
     labs(title = "",
          x = "",
          y = "") +
+  # Different colours and shapes for different timepoints
     scale_color_manual(name='Calibration at',
                        breaks=c('7 days', '14 days', '30 days'),
                        values=c('7 days'='red', '14 days'='blue', '30 days'='forestgreen')) +
@@ -254,6 +261,7 @@ for (i in seq_along(model_calibrations)) {
   assign(plot_name, p, envir = .GlobalEnv)
 }
 
+# Add names to plots and axis titles (where necessary)
 model_1_plot <- model_1_plot + labs(title = "Generalised F") + theme(plot.title = element_text(hjust = 0.5))
 model_2_plot <- model_2_plot + labs(title = "Generalised Gamma") + theme(plot.title = element_text(hjust = 0.5))
 model_3_plot <- model_3_plot + labs(title = "Log-Logistic") + theme(plot.title = element_text(hjust = 0.5))
@@ -271,6 +279,7 @@ model_10_plot <- model_10_plot + labs(title = "Spline 5 knots",
 
 png("~/Documents/masters/wpp/calib_plots.png", width = 1000, height = 1000, res = 100)
 
+# Arrange plots
 ggarrange(model_1_plot, model_2_plot, model_3_plot, 
           model_4_plot, model_5_plot, model_6_plot, 
           model_7_plot, model_8_plot, model_9_plot, 
