@@ -1,18 +1,21 @@
+## Relies on objects created in 01_cohort_definition
+
 ## Load libraries for modelling
-library(survival)
+library(survival) # Survival modelling
 library(dplyr)
 library(lubridate)
 library(tidyr)
 library(randomForestSRC) # Required for mlr3 random forest model
 library(caret) # cross validation for AFT modelling
-library(ggsurvfit)
-library(splines)
-library(ggplot2)
-library(gtsummary)
-library(skimr)
-library(survex)
+library(ggsurvfit) # KM plot
+library(splines) # For spline variables
+library(ggplot2) # For plots
+library(gtsummary) # For tables
+library(skimr) # For skimming data
+library(survex) # For getting performance metrics from flexsurv models
 library(ggpubr)
-library(flexsurv)
+library(car) # Anova function
+library(flexsurv) # Parametric survival modelling
 
 ## Read in analysis data
 analysis_data_raw <- cohort_timetonextoffer
@@ -52,10 +55,11 @@ analysis_data_raw %>%
 
 ## Create analysis data
 analysis_data <- analysis_data_raw %>%
+# Omit NAs, make start and end numeric
   na.omit() %>% 
   mutate(startnum = as.numeric(start),
          endnum = as.numeric(end)) %>%
-  # Drop NAs and select relevant columns
+# select relevant columns
   select(ppn, time, offer, age, female, bloodgroup, kidneydisease,
          comorbcount, start, end, mpra,
          startnum, endnum, waiting_months, outcome, graftno, ethnicity) %>%
@@ -152,6 +156,7 @@ full_cox <- coxph(data = modelling_data,
 
 full_cox
 
+# Global p values for categoric variables
 Anova(full_cox)
 
 
@@ -219,8 +224,6 @@ age_plot <- ggplot(hr_df, aes(x = age_group, y = hazard_ratio)) +
   theme_minimal() +
 scale_y_log10()
 
-# Visual assessment implies one knot
-
 ## Make a binned pra variable
 breaks <- seq(0, 100, by = 10)
 labels <- paste0(breaks[-length(breaks)], "-", breaks[-1])
@@ -261,8 +264,6 @@ pra_plot <- ggplot(hr_df, aes(x = pra_group, y = hazard_ratio)) +
   theme_minimal() +
   scale_y_log10()
 
-# One knot
-
 ### Years
 
 year_bin_cox <- coxph(data = na.omit(modelling_data),
@@ -293,9 +294,7 @@ year_plot <- ggplot(hr_df, aes(x = year, y = hazard_ratio)) +
   scale_y_log10() +
   scale_x_continuous(breaks = hr_df$year) 
 
-# linear
 
-## Make a binned waiting months variable
 ## Make a binned waiting months variable
 breaks <- seq(0, 60, by = 6)  # 0 to 96 months (8 years) in 12-month intervals
 labels <- paste0(breaks[-length(breaks)], "-", breaks[-1])  # Create labels for bins
@@ -366,10 +365,12 @@ for (fold in 1:10) {
   test <- test %>% 
     as.data.frame() %>% 
     select(-seq_id)
-  
+
+  # Cox model with no covariates for KM estimator
   model_timetonextoffer <- coxph(Surv(time, offer) ~ 1,
                                  data = train)
-  
+
+  # Generate survex explainer and derive IBS of model 
   exp <- explain(model_timetonextoffer,
                  data=train,
                  y = Surv(train$time, 
@@ -408,7 +409,7 @@ for (dist in distributions) {
       as.data.frame() %>% 
       select(-seq_id)
     
-    
+    # Parametric survival modelling
     model_timetonextoffer <- flexsurvreg(Surv(time, offer) ~ ns(age, df = 2) +
                                            ns(mpra, df = 1)*bloodgroup + ns(waiting_months, df = 2)*bloodgroup +
                                            year*bloodgroup + female + kidneydisease*bloodgroup +
@@ -416,11 +417,11 @@ for (dist in distributions) {
                                            ethnicity,
                                          data = train,
                                          dist = dist,
-                                         hess.control = list(tol.evalues = 1e-2),
+                                         hess.control = list(tol.evalues = 1),
                                          method = "Nelder-Mead" # makes model robust to poor initialising values
     )                                      
     
-    
+    # Generate survex explainer and derive IBS of model
     exp <- explain(model_timetonextoffer,
                    data=train,
                    y = Surv(train$time, 
@@ -435,6 +436,7 @@ for (dist in distributions) {
     ibs <- integrated_brier_score(y, surv = surv, times = times)
     brier_scores <- c(brier_scores, ibs)
   }
+  # Create matrix of brier scores from different parametric survival distributions
   brier_mat[[paste("brier_scores", dist, sep = "_")]] <- brier_scores
 }
 
@@ -507,7 +509,8 @@ for (fold in 1:10) {
   test <- test %>% 
     as.data.frame() %>% 
     select(-seq_id)
-  
+
+  ## Random forest model
   model_timetonextoffer <- rfsrc(Surv(time, offer) ~ age + mpra + 
                                    waiting_months + female +
                                    year + graftno +  kidneydisease +
@@ -561,7 +564,7 @@ png("~/Documents/masters/wpp/brier_plot.png", width = 800, height = 600, res = 1
 
 ggplot(data = brier_scores_plot_df, 
        aes(x = factor(model, levels = model_levels), y = mean)) +
-  # Add lines instead of crossbars
+# Lines for ranges of brier scores
   geom_segment(aes(xend = factor(model, levels = model_levels), yend = start), 
                size = 1, color = "black") +  # Line from mean to start
   geom_segment(aes(xend = factor(model, levels = model_levels), yend = end), 
@@ -576,18 +579,18 @@ ggplot(data = brier_scores_plot_df,
   theme(
     panel.border = element_blank(),
     plot.background = element_blank(),
-    axis.ticks.x = element_blank(),  # Remove x-axis ticks if needed
-    panel.grid.major.y = element_blank(),  # Remove major y grid lines
-    panel.grid.minor.y = element_blank()   # Remove minor y grid lines
+    axis.ticks.x = element_blank(), 
+    panel.grid.major.y = element_blank(),  
+    panel.grid.minor.y = element_blank() 
   ) +
   # Add grid lines at every 0.01
   geom_hline(yintercept = seq(0, 0.15, by = 0.01), 
              linetype = "dotted", color = "grey") +
   # Add red dotted lines at specified y-values
-  geom_hline(yintercept = mean(brier_scores_rf), linetype = "dotted", color = "red") +
-  geom_hline(yintercept = mean(brier_scores_km), linetype = "dotted", color = "red") +
-  geom_hline(yintercept = 0, linetype = "dotted", color = "red") +
-  geom_text(aes(x = 0, y = 0.01, label = "Perfect prediction"), 
+  geom_hline(yintercept = mean(brier_scores_rf), linetype = "dotted", color = "red") + # random forest line
+  geom_hline(yintercept = mean(brier_scores_km), linetype = "dotted", color = "red") + # km estimator line
+  geom_hline(yintercept = 0, linetype = "dotted", color = "red") + # line at IBS = 0 (perfect prediction)
+  geom_text(aes(x = 0, y = 0.01, label = "Perfect prediction"), # labels
             vjust = -3, color = "black") +
   geom_text(aes(x = 9, y = mean(brier_scores_rf), label = "Random forest prediction"), 
             vjust = -1, color = "black") +
