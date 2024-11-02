@@ -1,3 +1,10 @@
+## Sensitivity analysis to test performance of continuous variables when they are entered as k=1-5 spline covariates and linear
+
+## Also test graft number, see if anything is lost in performance by making it binary variable
+
+## Utilises objects and libraries initiated in 02_wpp_modelling
+
+# Set number of knots to loop through
 knots <- c(1, 2, 3, 4, 5)
 
 #### AGE ####
@@ -33,7 +40,7 @@ for (k in knots) {
                                            bloodgroup*kidneydisease + 
                                            ethnicity" ))
     
-    
+    # Run model
     model_timetonextoffer <- flexsurvreg(model.formula,
                                          data = train,
                                          dist = 'llogis',
@@ -41,7 +48,7 @@ for (k in knots) {
                                          method = "Nelder-Mead" # makes model robust to poor initialising values
     )                                      
     
-    
+    # Get performance via survex as in 02_wpp_modelling
     exp <- explain(model_timetonextoffer,
                    data=train,
                    y = Surv(train$time, 
