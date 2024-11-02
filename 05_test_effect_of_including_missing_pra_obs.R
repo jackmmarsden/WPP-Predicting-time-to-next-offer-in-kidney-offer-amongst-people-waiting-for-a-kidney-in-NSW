@@ -1,7 +1,11 @@
-### SENS ANALYSIS INCLUDING MISSING PRA
+### Sensitivity analysis testing predictions with complete cases data and data with missing PRA
 
+## Utilises objects and libraries initiated in 02_wpp_modelling
+
+# complete cases data is just what was used before
 omitted_dat <- modelling_data
 
+# repeat earlier steps without omitting all NAs to derive modelling data including people with missing PRAs
 analysis_data_miss <- analysis_data_raw %>%
   filter(!is.na(ethnicity)) %>% 
   mutate(startnum = as.numeric(start),
@@ -73,7 +77,7 @@ modelling_data_miss <- survSplit(Surv(endnum,
          seq_id = paste(ppn, graft_str, sep = "_")) %>% 
   select(-ppn, -graft_str)
 
-
+# Complete model from model building step
 omit_model <- flexsurvreg(Surv(time, offer) ~ 
                             ns(age, df = 2) +
                             bloodgroup*ns(mpra, df = 1) + 
@@ -91,6 +95,7 @@ omit_model <- flexsurvreg(Surv(time, offer) ~
                           hess.control = list(tol.evalues = 1),
                           method = "Nelder-Mead")
 
+# Identical model assuming PRA is 0 when PRA is missing
 inclusive_model_pra_0 <- flexsurvreg(Surv(time, offer) ~ 
                                        ns(age, df = 2) +
                                        bloodgroup*ns(mpra, df = 1) + 
@@ -110,6 +115,7 @@ inclusive_model_pra_0 <- flexsurvreg(Surv(time, offer) ~
                           hess.control = list(tol.evalues = 1),
                           method = "Nelder-Mead")
 
+# Identical model assuming PRA is 100 when PRA is missing
 inclusive_model_pra_100 <- flexsurvreg(Surv(time, offer) ~ 
                                          ns(age, df = 2) +
                                          bloodgroup*ns(mpra, df = 1) + 
@@ -129,11 +135,11 @@ inclusive_model_pra_100 <- flexsurvreg(Surv(time, offer) ~
                                      hess.control = list(tol.evalues = 1),
                                      method = "Nelder-Mead")
 
-
+# Make hypothetical patients to test predictions on
 
 pred_set_baseline <- data.frame(
   age = 50,                            
-  female = 0.356,                           
+  female = 0,                           
   graftno = 1,                         
   bloodgroup = factor("O", levels = levels(modelling_data$bloodgroup)),
   kidneydisease = factor("Glomerular disease", levels = levels(modelling_data$kidneydisease)),
@@ -169,6 +175,8 @@ pred_set_worst_outcome <- data.frame(
   mpra = 100,
   waiting_months = 200  
 )
+
+# Predict time to event in each case
 
 preds_omit_baseline<-  predict(omit_model,
                           newdata = pred_set_baseline,
