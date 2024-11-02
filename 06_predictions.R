@@ -1,5 +1,8 @@
+## Generate prediction plots and predictions for results section utilising final model
 
-#### INITIATE ####
+## Uses objects and libraries initiated in 02_wpp_modelling
+
+#### Start with full model ####
 
 times = c(1:365)
 
@@ -20,6 +23,8 @@ times = c(1:365)
                            hess.control = list(tol.evalues = 1),
                            method = "Nelder-Mead")
 
+## Baseline prediction from whom everything will vary
+
 pred_set_baseline <- data.frame(
   age = 50,                            
   female = 0,                           
@@ -33,6 +38,7 @@ pred_set_baseline <- data.frame(
   waiting_months = 0  
 )
 
+# 1 - survival prediction is prediction of kidney offer by this time (upper and lower confidence intervals)
 preds_baseline_upper <-  1 - predict(used_model,
                                newdata = pred_set_baseline,
                                type = "survival",
@@ -50,19 +56,25 @@ preds_baseline_lower <-  1 - predict(used_model,
                                type = "survival",
                                times = times,
                                conf.int = TRUE)$.pred[[1]]$.pred_upper
+
+## Now generate predictions varying each covariate
+
 #### AGE ####
 
+# Make prediction sets with different ages
 pred_set_30 <- pred_set_baseline %>% 
   mutate(age = 30)
 
 pred_set_50 <- pred_set_baseline %>% 
-  mutate(age = 50)
+  mutate(age = 50) # baseline
 
 pred_set_70 <- pred_set_baseline %>% 
   mutate(age = 70)
 
 pred_set_80 <- pred_set_baseline %>% 
   mutate(age = 80)
+
+## Prediction curves with confidence intervals for each age 
 
 preds_30 <- 1 - predict(used_model,
                         newdata = pred_set_30,
@@ -133,6 +145,8 @@ preds_80_lower <- 1 - predict(used_model,
                               times = times,
                               conf.int = TRUE)$.pred[[1]]$.pred_upper
 
+# Arrange predictions into one dataset, upper/lower CIs into a different dataset
+
 data_age <- data.frame(
   times = times,
   age_50 = preds_baseline,  # Assuming preds_baseline corresponds to age 50
@@ -157,6 +171,8 @@ data_age_lower <- data.frame(
   age_80 = preds_80_lower
 )
 
+# Arrange data in long to prepare for plotting
+
 data_long_age <- pivot_longer(data_age, 
                               cols = c(age_50, age_30, age_70, age_80), 
                               names_to = "Age", 
@@ -176,6 +192,7 @@ data_bounds_age <- pivot_longer(data_age_upper,
 # Create the line plot for age
 age_preds <- ggplot(data_long_age, aes(x = times, y = preds, color = Age)) +
   geom_line() +   
+# Create a ribbon plot for 95% confidence intervals
   geom_ribbon(data = data_bounds_age, aes(ymin = lower, 
                                           ymax = upper, 
                                           fill = Age, 
@@ -186,7 +203,8 @@ age_preds <- ggplot(data_long_age, aes(x = times, y = preds, color = Age)) +
   labs(title = "Age",
        x = "",                 
        y = "") + 
-  theme_minimal() +                    
+  theme_minimal() +         
+# colour coding 
   scale_color_manual(values = c("age_50" = "blue", "age_30" = "forestgreen", "age_70" = "red",
                                 "age_80" = "purple"),
                      labels = c("age_30" = "30", "age_50" = "50", 
@@ -195,7 +213,7 @@ age_preds <- ggplot(data_long_age, aes(x = times, y = preds, color = Age)) +
                                "age_80" = "purple"),
                     labels = c("age_30" = "30", "age_50" = "50", 
                                "age_70" = "70", "age_80" = "80")) +
-  theme(legend.position = c(0.8, 0.6),  # Adjust x and y coordinates as needed
+  theme(legend.position = c(0.8, 0.6),  # legend on the plot for space efficiency
         legend.background = element_rect(fill = "white"),
         plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
         legend.title = element_blank())
@@ -1492,7 +1510,7 @@ pra_preds <- ggplot(data_long_pra, aes(x = times, y = preds, color = PRA)) +
 
 
 
-#### PUT THEM ALL TOGETHER ####
+#### PUT THEM ALL TOGETHER (except year, gets its own plot) ####
 
 png("~/Documents/masters/wpp/prediction_plots.png", width = 1000, 
     height = 1000, res = 100)
@@ -1506,6 +1524,8 @@ ggarrange(age_preds, blood_group_preds, comorb_preds,
 
 dev.off()
 
+## Year plot
+
 png("~/Documents/masters/wpp/year_pred_plot.png", width = 1000, 
     height = 1000, res = 100)
 
@@ -1515,6 +1535,7 @@ year_preds
 dev.off()
 
 #### 'EXTREME' OBSERVATIONS ####
+# observations found from searching the data
 
 ## Obs 1
 
@@ -1530,7 +1551,7 @@ pred_set_obs_1 <- data.frame(
   mpra = 98.3,
   waiting_months = 29.6  
 )
-
+# prediction curves with CIs for this obs
 preds_1_upper <-  1 - predict(used_model,
                                      newdata = pred_set_obs_1,
                                      type = "survival",
@@ -1657,7 +1678,7 @@ data_bounds_preds <- pivot_longer(data_preds_upper,
                                   values_to = "upper") %>% 
   left_join(data_long_preds_lower, by = c("times", "Category"));
 
-# Create the line plot for predictions
+# Create the prediction plot
 png("~/Documents/masters/wpp/prediction_plot_obs.png", width = 1000, 
     height = 1000, res = 100)
 
